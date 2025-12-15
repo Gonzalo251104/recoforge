@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from sqlmodel import Session, SQLModel, select
 
@@ -45,7 +45,7 @@ def seed(users_n: int = 30, items_n: int = 120, interactions_n: int = 800):
         items = session.exec(select(Item)).all()
 
         # Interactions
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         rows = []
         for _ in range(interactions_n):
             u = random.choice(users)
