@@ -12,3 +12,6 @@ Thumbs.db
 
 # Env
 .env
+
+# DB
+*.db
