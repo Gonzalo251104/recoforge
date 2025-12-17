@@ -4,6 +4,7 @@ from app.api.routes_reco import router as reco_router
 from app.api.routes_events import router as events_router
 from app.api.routes_users import router as users_router
 from app.api.routes_items import router as items_router
+from app.api.routes_metrics import router as metrics_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -14,6 +15,7 @@ app.include_router(reco_router)
 app.include_router(events_router)
 app.include_router(users_router)
 app.include_router(items_router)
+app.include_router(metrics_router)
 
 
 @app.get("/health", tags=["system"])
