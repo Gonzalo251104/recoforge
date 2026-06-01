@@ -1,10 +1,14 @@
+"""Offline evaluation metrics endpoint."""
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from app.db.session import get_session
-from app.reco.metrics import evaluate_content_based
+from app.reco.metrics import evaluate_offline
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
+
+SUPPORTED_STRATEGIES = {"content", "user", "hybrid"}
 
 
 @router.get("/offline")
@@ -14,21 +18,15 @@ def offline_metrics(
     users: int = 20,
     session: Session = Depends(get_session),
 ):
+    """Run offline evaluation for a recommendation strategy."""
     if k <= 0 or k > 100:
         raise HTTPException(status_code=400, detail="k must be between 1 and 100")
     if users <= 0 or users > 200:
         raise HTTPException(status_code=400, detail="users must be between 1 and 200")
-
-    if strategy != "content":
+    if strategy not in SUPPORTED_STRATEGIES:
         raise HTTPException(
-            status_code=400, detail="Only strategy=content is available for now"
+            status_code=400,
+            detail=f"Unknown strategy '{strategy}'. Supported: {', '.join(sorted(SUPPORTED_STRATEGIES))}",
         )
 
-    scores = evaluate_content_based(session=session, k=k, users_limit=users)
-
-    return {
-        "strategy": strategy,
-        "k": k,
-        "usersEvaluated": users,
-        "metrics": scores,
-    }
+    return evaluate_offline(session=session, strategy=strategy, k=k, users_limit=users)

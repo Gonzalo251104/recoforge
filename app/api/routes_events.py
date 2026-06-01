@@ -1,21 +1,16 @@
 from datetime import datetime, UTC
-from pydantic import BaseModel, Field
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
+from app.api.schemas import CreateEventRequest, EventResponse
 from app.db.models import Interaction, Item, User
 from app.db.session import get_session
 
 router = APIRouter(prefix="/events", tags=["events"])
 
 
-class CreateEventRequest(BaseModel):
-    userId: int = Field(..., ge=1)
-    itemId: int = Field(..., ge=1)
-    eventType: str = Field(..., pattern="^(view|click|save)$")
-
-
-@router.post("")
+@router.post("", response_model=EventResponse)
 def create_event(payload: CreateEventRequest, session: Session = Depends(get_session)):
     user = session.exec(select(User).where(User.id == payload.userId)).first()
     if user is None:
