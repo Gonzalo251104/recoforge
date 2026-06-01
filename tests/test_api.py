@@ -49,3 +49,55 @@ def test_metrics_offline(client):
     assert "metrics" in data
     assert "precision@k" in data["metrics"]
     assert "recall@k" in data["metrics"]
+
+
+def test_recommendations_user_based(client):
+    """Test user-based collaborative filtering strategy."""
+    r = client.get("/recommendations/1?strategy=user&k=5")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["userId"] == 1
+    assert data["strategy"] == "user"
+    assert "results" in data
+    assert isinstance(data["results"], list)
+
+
+def test_recommendations_hybrid(client):
+    """Test hybrid recommendation strategy."""
+    r = client.get("/recommendations/1?strategy=hybrid&k=5")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["userId"] == 1
+    assert data["strategy"] == "hybrid"
+    assert "results" in data
+    assert isinstance(data["results"], list)
+
+
+def test_recommendations_invalid_user(client):
+    """Test that requesting recommendations for non-existent user returns 404."""
+    r = client.get("/recommendations/9999?strategy=content&k=5")
+    assert r.status_code == 404
+    assert "User not found" in r.json()["detail"]
+
+
+def test_recommendations_invalid_strategy(client):
+    """Test that invalid strategy returns 400."""
+    r = client.get("/recommendations/1?strategy=invalid&k=5")
+    assert r.status_code == 400
+    assert "Unknown strategy" in r.json()["detail"]
+
+
+def test_get_single_item(client):
+    """Test getting a single item by ID."""
+    r = client.get("/items/1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == 1
+    assert "title" in data
+    assert "tags" in data
+
+
+def test_get_item_not_found(client):
+    """Test that non-existent item returns 404."""
+    r = client.get("/items/9999")
+    assert r.status_code == 404
