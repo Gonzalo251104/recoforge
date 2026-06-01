@@ -1,8 +1,8 @@
-import json
 from typing import Iterable, List, Set, Tuple
 
-from sqlmodel import Session, select
+from sqlmodel import Session, desc, select
 
+from app.core.utils import parse_tags_set
 from app.db.models import Interaction, Item
 
 
@@ -14,16 +14,6 @@ def _jaccard(a: Set[str], b: Set[str]) -> float:
     return inter / union if union else 0.0
 
 
-def _parse_tags(tags_json: str) -> Set[str]:
-    try:
-        raw = json.loads(tags_json or "[]")
-        if isinstance(raw, list):
-            return {str(x).strip().lower() for x in raw if str(x).strip()}
-    except Exception:
-        pass
-    return set()
-
-
 def _user_profile_tags(session: Session, user_id: int, limit_history: int = 1000) -> Set[str]:
     """
     Builds a simple user profile as the union of tags from items the user interacted with.
@@ -31,16 +21,16 @@ def _user_profile_tags(session: Session, user_id: int, limit_history: int = 1000
     """
     stmt = (
         select(Interaction, Item)
-        .join(Item, Item.id == Interaction.item_id)
+        .join(Item)
         .where(Interaction.user_id == user_id)
-        .order_by(Interaction.ts.desc())
+        .order_by(desc(Interaction.ts))
         .limit(limit_history)
     )
-    rows: Iterable[Tuple[Interaction, Item]] = session.exec(stmt).all()
+    rows: Iterable[Tuple[Interaction, Item]] = session.exec(stmt).all() # type: ignore[assignment]
 
     profile: Set[str] = set()
     for _, item in rows:
-        profile |= _parse_tags(item.tags_json)
+        profile |= parse_tags_set(item.tags_json)
     return profile
 
 
@@ -62,7 +52,7 @@ def recommend_content_based(session: Session, user_id: int, k: int = 10) -> List
     for it in items:
         if it.id in seen_ids:
             continue
-        tags = _parse_tags(it.tags_json)
+        tags = parse_tags_set(it.tags_json)
         score = _jaccard(profile, tags)
         if score > 0:
             scored.append((score, it))
