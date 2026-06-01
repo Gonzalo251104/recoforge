@@ -25,7 +25,7 @@ def seed(users_n: int = 30, items_n: int = 120, interactions_n: int = 800):
         session.add_all(users)
         session.commit()
 
-        users = session.exec(select(User)).all()
+        users = list(session.exec(select(User)).all())
 
         # Items
         items_seed = make_items(items_n)
@@ -42,7 +42,7 @@ def seed(users_n: int = 30, items_n: int = 120, interactions_n: int = 800):
         session.add_all(items)
         session.commit()
 
-        items = session.exec(select(Item)).all()
+        items = list(session.exec(select(Item)).all())
 
         # Interactions
         now = datetime.now(UTC)
