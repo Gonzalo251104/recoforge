@@ -17,6 +17,7 @@ def reset_db():
 
 
 def seed(users_n: int = 30, items_n: int = 120, interactions_n: int = 800):
+    random.seed(42)
     reset_db()
 
     with Session(engine) as session:
