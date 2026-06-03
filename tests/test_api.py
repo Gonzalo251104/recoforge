@@ -101,3 +101,116 @@ def test_get_item_not_found(client):
     """Test that non-existent item returns 404."""
     r = client.get("/items/9999")
     assert r.status_code == 404
+
+
+def test_list_users(client):
+    """Test listing users with pagination."""
+    r = client.get("/users?page=1&page_size=2")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["page"] == 1
+    assert data["pageSize"] == 2
+    assert "total" in data
+    assert len(data["results"]) == 2
+
+
+def test_create_user(client):
+    """Test creating a new user."""
+    payload = {"username": "new_test_user"}
+    r = client.post("/users", json=payload)
+    assert r.status_code == 201
+    data = r.json()
+    assert data["username"] == "new_test_user"
+    assert "id" in data
+    assert "created_at" in data
+
+
+def test_get_user_profile(client):
+    """Test getting user detailed profile statistics."""
+    r = client.get("/users/1")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["id"] == 1
+    assert "username" in data
+    assert "created_at" in data
+    assert "stats" in data
+    assert "totalViews" in data["stats"]
+    assert "totalClicks" in data["stats"]
+    assert "totalSaves" in data["stats"]
+    assert "favoriteTags" in data["stats"]
+
+
+def test_list_events(client):
+    """Test listing events with filters and pagination."""
+    r = client.get("/events?page=1&page_size=5")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["page"] == 1
+    assert data["pageSize"] == 5
+    assert "total" in data
+    assert "results" in data
+    
+    # Filter by user_id
+    r_filtered = client.get("/events?user_id=1&page_size=5")
+    assert r_filtered.status_code == 200
+    data_filtered = r_filtered.json()
+    for item in data_filtered["results"]:
+        assert item["userId"] == 1
+
+
+def test_item_crud_and_similarity(client):
+    """Test creating, updating, getting similar items, and deleting an item."""
+    # 1. Create item
+    payload = {
+        "title": "CRUD Adventure Hike",
+        "description": "A wonderful hiking experience through local trails.",
+        "city": "Huaraz",
+        "priceMin": 50.0,
+        "priceMax": 120.0,
+        "tags": ["adventure", "nature", "hiking"],
+    }
+    r = client.post("/items", json=payload)
+    assert r.status_code == 201
+    created_data = r.json()
+    item_id = created_data["id"]
+    assert created_data["title"] == "CRUD Adventure Hike"
+    assert created_data["description"] == "A wonderful hiking experience through local trails."
+    assert created_data["city"] == "Huaraz"
+    assert created_data["priceMin"] == 50.0
+    assert created_data["priceMax"] == 120.0
+    assert "adventure" in created_data["tags"]
+
+    # 2. Get similar items for item 1
+    r_sim = client.get(f"/items/1/similar?k=3")
+    assert r_sim.status_code == 200
+    sim_data = r_sim.json()
+    assert isinstance(sim_data, list)
+    for sim_item in sim_data:
+        assert "score" in sim_item
+        assert "explanation" in sim_item
+        assert "description" in sim_item
+
+    # 3. Update item
+    update_payload = {
+        "title": "Updated Hiking Adventure",
+        "priceMin": 60.0,
+        "tags": ["nature", "hiking", "extreme"],
+    }
+    r_up = client.put(f"/items/{item_id}", json=update_payload)
+    assert r_up.status_code == 200
+    updated_data = r_up.json()
+    assert updated_data["title"] == "Updated Hiking Adventure"
+    assert updated_data["priceMin"] == 60.0
+    assert updated_data["priceMax"] == 120.0 # unchanged
+    assert "extreme" in updated_data["tags"]
+    assert "adventure" not in updated_data["tags"]
+
+    # 4. Delete item
+    r_del = client.delete(f"/items/{item_id}")
+    assert r_del.status_code == 200
+    assert r_del.json()["status"] == "success"
+
+    # 5. Get item 404
+    r_get = client.get(f"/items/{item_id}")
+    assert r_get.status_code == 404
+

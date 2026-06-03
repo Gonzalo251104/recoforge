@@ -63,6 +63,8 @@ def client():
             [
                 Interaction(user_id=u1.id, item_id=i1.id, event_type="view"),
                 Interaction(user_id=u1.id, item_id=i2.id, event_type="save"),
+                Interaction(user_id=u2.id, item_id=i1.id, event_type="view"),
+                Interaction(user_id=u2.id, item_id=i3.id, event_type="save"),
             ]
         )
         session.commit()
