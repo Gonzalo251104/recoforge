@@ -214,3 +214,20 @@ def test_item_crud_and_similarity(client):
     r_get = client.get(f"/items/{item_id}")
     assert r_get.status_code == 404
 
+
+def test_metrics_offline_all(client):
+    """Test evaluating all strategies in offline evaluation."""
+    r = client.get("/metrics/offline/all?k=5&users=10")
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, dict)
+    for strategy in ["content", "user", "hybrid", "popular"]:
+        assert strategy in data
+        item = data[strategy]
+        assert item["strategy"] == strategy
+        assert "metrics" in item
+        assert "precision@k" in item["metrics"]
+        assert "recall@k" in item["metrics"]
+        assert "ndcg@k" in item["metrics"]
+
+
