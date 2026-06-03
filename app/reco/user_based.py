@@ -1,11 +1,6 @@
-"""User-based collaborative filtering recommendation engine.
-
-This module implements user-based collaborative filtering using cosine similarity
-between user interaction vectors.
-"""
-
+import math
 from collections import defaultdict
-from math import sqrt
+from datetime import datetime, UTC
 from typing import Dict, List, Set, Tuple
 
 from sqlmodel import Session, col, select
@@ -13,12 +8,16 @@ from sqlmodel import Session, col, select
 from app.db.models import Interaction, Item
 
 
-def _get_user_interactions(session: Session) -> Dict[int, Dict[int, float]]:
+def _get_user_interactions(
+    session: Session,
+    decay_factor: float = 0.05
+) -> Dict[int, Dict[int, float]]:
     """
     Build a dictionary mapping user_id -> {item_id: score}.
-    Scores are based on interaction types: view=1, click=2, save=3.
+    Scores are based on interaction types and decay exponentially over time.
     """
     event_weights = {"view": 1.0, "click": 2.0, "save": 3.0}
+    now = datetime.now(UTC)
 
     stmt = select(Interaction)
     interactions = session.exec(stmt).all()
@@ -26,8 +25,17 @@ def _get_user_interactions(session: Session) -> Dict[int, Dict[int, float]]:
     user_items: Dict[int, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
 
     for inter in interactions:
-        weight = event_weights.get(inter.event_type, 1.0)
-        user_items[inter.user_id][inter.item_id] += weight
+        weight = event_weights.get(inter.event_type.value if hasattr(inter.event_type, "value") else str(inter.event_type), 1.0)
+        
+        # Calculate temporal decay
+        ts_utc = inter.ts
+        if ts_utc.tzinfo is None:
+            ts_utc = ts_utc.replace(tzinfo=UTC)
+            
+        days_diff = (now - ts_utc).total_seconds() / (3600.0 * 24.0)
+        decay = math.exp(-decay_factor * max(0.0, days_diff))
+        
+        user_items[inter.user_id][inter.item_id] += weight * decay
 
     return {uid: dict(items) for uid, items in user_items.items()}
 
@@ -42,8 +50,8 @@ def _cosine_similarity(vec_a: Dict[int, float], vec_b: Dict[int, float]) -> floa
         return 0.0
 
     dot_product = sum(vec_a[k] * vec_b[k] for k in common_keys)
-    norm_a = sqrt(sum(v ** 2 for v in vec_a.values()))
-    norm_b = sqrt(sum(v ** 2 for v in vec_b.values()))
+    norm_a = math.sqrt(sum(v ** 2 for v in vec_a.values()))
+    norm_b = math.sqrt(sum(v ** 2 for v in vec_b.values()))
 
     if norm_a == 0 or norm_b == 0:
         return 0.0
@@ -79,13 +87,10 @@ def recommend_user_based(
     user_id: int,
     k: int = 10,
     num_similar_users: int = 10,
-) -> List[Item]:
+) -> List[Tuple[Item, float]]:
     """
     Recommend items using user-based collaborative filtering.
-
-    1. Find users similar to the target user (based on interaction patterns).
-    2. Aggregate items those similar users liked but target hasn't seen.
-    3. Rank by weighted similarity scores.
+    Returns top-k items not yet interacted with as (Item, score) tuples.
     """
     user_interactions = _get_user_interactions(session)
 
@@ -113,7 +118,8 @@ def recommend_user_based(
 
     # Sort by score descending
     sorted_items = sorted(item_scores.items(), key=lambda x: x[1], reverse=True)
-    top_item_ids = [item_id for item_id, _ in sorted_items[:k]]
+    candidates = sorted_items[:k]
+    top_item_ids = [item_id for item_id, _ in candidates]
 
     # Fetch Item objects
     if not top_item_ids:
@@ -122,6 +128,12 @@ def recommend_user_based(
     stmt = select(Item).where(col(Item.id).in_(top_item_ids))
     items = session.exec(stmt).all()
 
-    # Preserve score order
+    # Preserve score order and construct tuple results
     item_map = {it.id: it for it in items}
-    return [item_map[iid] for iid in top_item_ids if iid in item_map]
+    
+    result = []
+    for item_id, score in candidates:
+        if item_id in item_map:
+            result.append((item_map[item_id], score))
+            
+    return result

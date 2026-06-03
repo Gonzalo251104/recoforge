@@ -13,11 +13,13 @@ from app.db.models import Interaction, User
 from app.reco.content_based import recommend_content_based
 from app.reco.user_based import recommend_user_based
 from app.reco.hybrid import recommend_hybrid
+from app.reco.popular import recommend_popular
 
 STRATEGY_MAP = {
     "content": recommend_content_based,
     "user": recommend_user_based,
     "hybrid": recommend_hybrid,
+    "popular": recommend_popular,
 }
 
 
@@ -118,8 +120,8 @@ def evaluate_offline(
         if not test_ids:
             continue
 
-        items = strat_fn(session=session, user_id=user.id, k=k)
-        recommended_ids = [it.id for it in items if it.id is not None]
+        items_with_scores = strat_fn(session=session, user_id=user.id, k=k)
+        recommended_ids = [it.id for it, _ in items_with_scores if it.id is not None]
 
         precisions.append(precision_at_k(recommended_ids, test_ids, k))
         recalls.append(recall_at_k(recommended_ids, test_ids, k))

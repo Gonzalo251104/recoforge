@@ -1,11 +1,5 @@
-"""Hybrid recommendation engine combining content-based and user-based approaches.
-
-This module implements a weighted hybrid strategy that combines scores from
-content-based and user-based collaborative filtering.
-"""
-
 from collections import defaultdict
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 
 from sqlmodel import Session, col, select
 
@@ -21,24 +15,14 @@ def recommend_hybrid(
     content_weight: float = 0.5,
     user_weight: float = 0.5,
     fetch_multiplier: int = 3,
-) -> List[Item]:
+) -> List[Tuple[Item, float]]:
     """
     Recommend items using a hybrid approach combining content-based and user-based filtering.
-
-    Args:
-        session: Database session.
-        user_id: Target user ID.
-        k: Number of recommendations to return.
-        content_weight: Weight for content-based scores (0-1).
-        user_weight: Weight for user-based scores (0-1).
-        fetch_multiplier: Fetch k * multiplier from each strategy to ensure variety.
-
-    Returns:
-        List of recommended Item objects.
+    Returns recommended items with aggregated scores.
     """
     fetch_k = k * fetch_multiplier
 
-    # Get recommendations from both strategies
+    # Get recommendations with scores from both strategies
     content_items = recommend_content_based(session=session, user_id=user_id, k=fetch_k)
     user_items = recommend_user_based(session=session, user_id=user_id, k=fetch_k)
 
@@ -49,16 +33,15 @@ def recommend_hybrid(
     # Score aggregation: use rank-based scoring (higher rank = higher score)
     item_scores: Dict[int, float] = defaultdict(float)
 
-    # Content-based scoring (rank-based: first item gets highest score)
-    for rank, item in enumerate(content_items):
+    # Content-based scoring
+    for rank, (item, _) in enumerate(content_items):
         if item.id is None or item.id in seen_ids:
             continue
-        # Normalize rank to 0-1 range (higher is better)
         rank_score = 1.0 - (rank / max(len(content_items), 1))
         item_scores[item.id] += content_weight * rank_score
 
     # User-based scoring
-    for rank, item in enumerate(user_items):
+    for rank, (item, _) in enumerate(user_items):
         if item.id is None or item.id in seen_ids:
             continue
         rank_score = 1.0 - (rank / max(len(user_items), 1))
@@ -69,8 +52,9 @@ def recommend_hybrid(
         return content_items[:k]
 
     # Sort by combined score
-    sorted_item_ids = sorted(item_scores.items(), key=lambda x: x[1], reverse=True)
-    top_item_ids = [item_id for item_id, _ in sorted_item_ids[:k]]
+    sorted_items = sorted(item_scores.items(), key=lambda x: x[1], reverse=True)
+    candidates = sorted_items[:k]
+    top_item_ids = [item_id for item_id, _ in candidates]
 
     if not top_item_ids:
         return []
@@ -79,6 +63,12 @@ def recommend_hybrid(
     stmt = select(Item).where(col(Item.id).in_(top_item_ids))
     items = session.exec(stmt).all()
 
-    # Preserve score order
+    # Preserve score order and return tuples
     item_map = {it.id: it for it in items}
-    return [item_map[iid] for iid in top_item_ids if iid in item_map]
+    
+    result = []
+    for item_id, score in candidates:
+        if item_id in item_map:
+            result.append((item_map[item_id], score))
+            
+    return result
